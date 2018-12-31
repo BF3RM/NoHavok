@@ -1,0 +1,9 @@
+{
+	"Name": "NoHavok",
+	"Authors": ["Powback"],
+	"Description": "Replaces the StaticModelGroupEntity entries with regular entities.",
+	"URL": "",
+	"Version": "0",
+	"HasWebUI": false,
+	"HasVeniceEXT": true
+}
