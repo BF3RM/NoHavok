@@ -1,11 +1,13 @@
 class 'NoHavokShared'
 
 require "__shared/NoHavokCommon"
-require "__shared/Utils"
+require "__shared/Utils/Utils"
 
 
-function MapEditorShared:__init()
-    m_Logger:Write("Initializing NoHavokShared")
+function NoHavokShared:__init()
+    print("Initializing NoHavokShared")
+
+
 
 end
 

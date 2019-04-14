@@ -1,9 +1,8 @@
 class 'NoHavokCommon'
 
 
-
 function NoHavokCommon:__init(p_Realm)
-	print("Initializing NoHavokCommon: " + p_Realm)
+	print("Initializing NoHavokCommon: " .. p_Realm)
 	self:RegisterVars(p_Realm)
 end
 
@@ -24,7 +23,10 @@ function NoHavokCommon:RegisterVars(p_Realm)
 
 	self.m_Realm = p_Realm
 
+	self.m_WorldPartReferences = {}
 	self.m_PhysicsAssets = {}
+	self.m_Unresolved = {}
+	self.m_UnresolvedVariation = {}
 end
 
 function NoHavokCommon:RegisterStaticModelGroupAsset(p_AssetName, p_Data)
@@ -32,6 +34,12 @@ function NoHavokCommon:RegisterStaticModelGroupAsset(p_AssetName, p_Data)
 	print("Registered PhysicsData: " .. p_AssetName)
 end
 
+function NoHavokCommon:GetUnresolved()
+	return self.m_Unresolved
+end
+function NoHavokCommon:GetUnresolvedVariations()
+	return self.m_UnresolvedVariation
+end
 
 function NoHavokCommon:OnPartitionLoaded(p_Partition)
 	if p_Partition == nil then
@@ -59,6 +67,9 @@ function NoHavokCommon:OnPartitionLoaded(p_Partition)
 		if l_Instance.typeInfo == ObjectVariation.typeInfo then
 		    local s_Instance = ObjectVariation(l_Instance)
 		    self.m_Variations[s_Instance.nameHash] = s_Instance
+			if(self.m_UnresolvedVariation[s_Instance.nameHash] ~= nil) then
+				self:ResolveVariation(s_Instance.nameHash)
+			end
 		end
 
 		if(l_Instance:Is("Blueprint")) then
@@ -67,6 +78,14 @@ function NoHavokCommon:OnPartitionLoaded(p_Partition)
 
 		if(s_Blueprint ~= nil) then
 			self.m_Primary[tostring(l_Instance.instanceGuid)] = s_Blueprint.name
+		end
+
+		if(self.m_Unresolved[tostring(l_Instance.instanceGuid)] ~= nil) then
+			self:ResolveBlueprint(tostring(l_Instance.instanceGuid))
+		end
+		if(self.m_Unresolved[IncreasedGuid(tostring(l_Instance.instanceGuid))] ~= nil) then
+			self:ResolveBlueprint(tostring(l_Instance.instanceGuid), true)
+
 		end
 
 		if(l_Instance.typeInfo.name == "StaticModelGroupEntityData") then
@@ -97,7 +116,7 @@ function NoHavokCommon:OnPartitionLoaded(p_Partition)
 					end
 
 					if(s_MemberData.instanceTransforms:get(i) == nil) then
-						s_Transform = QuatToLineartransform(self:StringToVec4(s_Havok[s_Index].Rotation), self:StringToVec3(s_Havok[s_Index].Position), s_Scale)
+						s_Transform = QuatToLineartransform(StringToVec4(s_Havok[s_Index].Rotation), StringToVec3(s_Havok[s_Index].Position), s_Scale)
 					else
 						s_Transform = s_Original.memberDatas:get(k).instanceTransforms:get(i)
 					end
@@ -120,8 +139,64 @@ function NoHavokCommon:OnPartitionLoaded(p_Partition)
 	end
 end
 
+function NoHavokCommon:ResolveBlueprint(p_InstanceGuid, p_IncreasedGuid)
+	local s_Guid = p_InstanceGuid
+	if(p_IncreasedGuid == true) then
+		s_Guid = IncreasedGuid(p_InstanceGuid)
+	end
+	if(self.m_Unresolved[s_Guid] ~= nil) then
+		for l_WorldPartName, l_Entry in pairs(self.m_Unresolved[s_Guid]) do
+			if(self.m_WorldPartReferences[l_WorldPartName] == nil) then
+				print("Failed to get worldpart: " .. l_WorldPartName)
+				return
+			end
+			local s_WorldPartReference = self.m_WorldPartReferences[l_WorldPartName]
+			local s_WorldPart = WorldPartData(s_WorldPartReference.blueprint);
 
-function NoHavokCommon:GetBlueprint( p_Guid )
+			for _, l_Index in pairs(self.m_Unresolved[s_Guid][l_WorldPartName]) do
+				local s_Reference = ReferenceObjectData(s_WorldPart.objects:get(l_Index))
+				local s_Blueprint = self:GetBlueprintFromInstance(p_InstanceGuid)
+				if(s_Blueprint == nil) then
+					print("Failed to fetch blueprint: " .. p_InstanceGuid .. " | " .. s_Guid)
+				end
+				s_Blueprint = Blueprint(s_Blueprint)
+				s_Reference.blueprint = Blueprint(s_Blueprint)
+				print("Replaced blueprint: " .. s_Blueprint.name)
+			end
+			self.m_Unresolved[s_Guid][l_WorldPartName] = nil
+		end
+		self.m_Unresolved[s_Guid] = nil
+	else
+		print("Attempted to update an instance that's already resolved?")
+	end
+end
+
+function NoHavokCommon:ResolveVariation(p_Variation)
+	print("Resolving variation: " .. p_Variation)
+
+	if(self.m_UnresolvedVariation[p_Variation] ~= nil) then
+		for l_WorldPartName, l_Entry in pairs(self.m_UnresolvedVariation[p_Variation]) do
+			if(self.m_WorldPartReferences[l_WorldPartName] == nil) then
+				print("Failed to get worldpart: " .. l_WorldPartName)
+				return
+			end
+			local s_WorldPartReference = self.m_WorldPartReferences[l_WorldPartName]
+			local s_WorldPart = WorldPartData(s_WorldPartReference.blueprint);
+
+			for _, l_Index in pairs(self.m_UnresolvedVariation[p_Variation][l_WorldPartName]) do
+				local s_Reference = ReferenceObjectData(s_WorldPart.objects:get(l_Index))
+				local s_Variation = self.m_Variations[p_Variation]
+				s_Reference.objectVariation = s_Variation
+			end
+			self.m_UnresolvedVariation[p_Variation][l_WorldPartName] = nil
+		end
+		self.m_UnresolvedVariation[p_Variation] = nil
+	else
+		print("Attempted to update an instance that's already resolved?")
+	end
+end
+
+function NoHavokCommon:GetBlueprintFromInstance( p_Guid )
 	if self.m_Primary[p_Guid] ~= nil then
 		return ResourceManager:LookupDataContainer(ResourceCompartment.ResourceCompartment_Game,self.m_Primary[p_Guid])
 	end
@@ -137,35 +212,51 @@ function NoHavokCommon:CreateData(p_Name, p_ToSpawn)
 
  	for k,v in ipairs(p_ToSpawn) do
 	    -- Create our reference object data.
-	    local s_Blueprint = self:GetBlueprint(tostring(v.mesh.instanceGuid))
-	    if(s_Blueprint == nil) then
-	    	print("Failed to find blueprint: " .. tostring(v.mesh.instanceGuid))
-	    	goto continue
-	    end
-	    s_Blueprint = Blueprint(s_Blueprint)
+		local s_Blueprint = self:GetBlueprintFromInstance(tostring(v.mesh.instanceGuid))
+		if(s_Blueprint == nil) then
+			local s_Guid = tostring(v.mesh.instanceGuid)
+
+			if(self.m_Unresolved[s_Guid] == nil) then
+				self.m_Unresolved[s_Guid] = {}
+			end
+			if(self.m_Unresolved[s_Guid][p_Name] == nil) then
+				self.m_Unresolved[s_Guid][p_Name] = {}
+			end
+			table.insert(self.m_Unresolved[s_Guid][p_Name], k)
+		else
+			s_Blueprint = Blueprint(s_Blueprint)
+		end
 
 	    local s_Variation = nil
 	    if(v.variation ~= nil and v.variation ~= 0) then
-	    	if self.m_Variations[v.variation] == nil then
-	    		print("Missing variation:" .. v.variation)
-	    	else
-	    		s_Variation = self.m_Variations[v.variation]
-	    	end
+			if self.m_Variations[v.variation] == nil then
+				if(self.m_UnresolvedVariation[v.variation] == nil) then
+					self.m_UnresolvedVariation[v.variation] = {}
+				end
+				if(self.m_UnresolvedVariation[v.variation][p_Name] == nil) then
+					self.m_UnresolvedVariation[v.variation][p_Name] = {}
+				end
+				table.insert(self.m_UnresolvedVariation[v.variation][p_Name], k)
+
+			else
+				s_Variation = self.m_Variations[v.variation]
+			end
 	    end
 
-	    if(s_Blueprint ~= nil) then
-		    local referenceObject = ReferenceObjectData()
-		    referenceObject.isEventConnectionTarget = 3
-		    referenceObject.isPropertyConnectionTarget = 3
-		    referenceObject.indexInBlueprint = -1
-		    referenceObject.blueprintTransform = v.transform
-		    referenceObject.blueprint = s_Blueprint
-		    referenceObject.objectVariation = s_Variation
-		    referenceObject.streamRealm = StreamRealm.StreamRealm_None
-		    referenceObject.castSunShadowEnable = true
-		    referenceObject.excluded = false
-			worldPart.objects:add(referenceObject)
-	    end
+		local referenceObject = ReferenceObjectData()
+		referenceObject.isEventConnectionTarget = 3
+		referenceObject.isPropertyConnectionTarget = 3
+		referenceObject.indexInBlueprint = -1
+		referenceObject.blueprintTransform = v.transform
+		--referenceObject.blueprint = s_Blueprint
+		--referenceObject.objectVariation = s_Variation
+		referenceObject.streamRealm = StreamRealm.StreamRealm_None
+		referenceObject.castSunShadowEnable = true
+		referenceObject.excluded = false
+		if(s_Blueprint == nil or s_Variation == nil ) then
+			referenceObject.excluded = false
+		end
+		worldPart.objects:add(referenceObject)
 
 	    ::continue::
 	end
@@ -189,6 +280,7 @@ function NoHavokCommon:PatchLevel(p_Name, p_ToSpawn)
  
     -- Create our data if it doesn't exist.
     local s_WorldPartReference = self:CreateData(p_Name, p_ToSpawn)
+	self.m_WorldPartReferences[p_Name] = s_WorldPartReference
  
     -- Calculate the highest blueprint index.
     -- This is just to do things "properly". You can probably
@@ -199,19 +291,16 @@ function NoHavokCommon:PatchLevel(p_Name, p_ToSpawn)
     print('Highest blueprint index: ' .. tostring(self.m_HighestIndex))
  
     -- Patch our data.
-    s_WorldPartReference.indexInBlueprint = self.m_HighestIndex
+    --s_WorldPartReference.indexInBlueprint = self.m_HighestIndex
     local s_WorldPart = WorldPartData(s_WorldPartReference.blueprint)
 
     self.m_Registry.referenceObjectRegistry:add(s_WorldPartReference)
     self.m_Registry.blueprintRegistry:add(s_WorldPart)
+
+	self:PatchRegistry(self.m_Registry, s_WorldPart)
     print(#s_WorldPart.objects)
     
-    for k,v in pairs(s_WorldPart.objects) do
-    	local s_Ref = ReferenceObjectData(v)
-		self.m_Registry.blueprintRegistry:add(s_Ref.blueprint)
-		self.m_Registry.referenceObjectRegistry:add(s_Ref)
-		s_Ref.indexInBlueprint = k
-    end
+
     print(self.m_HighestIndex)
  
     -- Add necessary instance to the registry.
@@ -222,6 +311,35 @@ function NoHavokCommon:PatchLevel(p_Name, p_ToSpawn)
  
     print('Finished patching level!')
     self.m_LevelData = s_WorldPart
+end
+
+function NoHavokCommon:PatchRegistry(p_Registry, p_WorldPart)
+
+	local s_BlueprintRegistryInstances = {}
+	local s_ReferenceObjectRegistry = {}
+
+	for k,v in pairs(p_Registry.blueprintRegistry) do
+		s_BlueprintRegistryInstances[tostring(v.instanceGuid)] = true
+	end
+	for k,v in pairs(p_Registry.referenceObjectRegistry) do
+		s_ReferenceObjectRegistry[tostring(v.instanceGuid)] = true
+	end
+
+	for k,v in pairs(p_WorldPart.objects) do
+		local s_Ref = ReferenceObjectData(v)
+		if(s_Ref.blueprint ~= nil) then
+			if(s_BlueprintRegistryInstances[tostring(v.instanceGuid)] == nil) then
+				self.m_Registry.blueprintRegistry:add(Blueprint(s_Ref.blueprint))
+				print("Added blueprint to BP registry")
+			end
+			if(s_ReferenceObjectRegistry[tostring(v.instanceGuid)] == nil) then
+				self.m_Registry.referenceObjectRegistry:add(s_Ref)
+				print("Added Ref to REF registry")
+			end
+
+		end
+		--s_Ref.indexInBlueprint = k
+	end
 end
 
 function NoHavokCommon:CalculateIndexInBlueprint(data)
@@ -244,7 +362,7 @@ function NoHavokCommon:CalculateIndexInBlueprint(data)
             print('Encountered unknown object in data: ' .. object.typeInfo.name)
         end
     end
- 
+
     return finalIndex
 end
 

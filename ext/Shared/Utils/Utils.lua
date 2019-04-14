@@ -1,3 +1,42 @@
+function DecreasedGuid( p_Guid )
+    local s_Part1 = p_Guid:sub(1,9)
+    local s_Part2 = string.byte(p_Guid:sub(10,10))
+    local s_Part3 = string.byte(p_Guid:sub(11,11))
+    local s_Part4 = p_Guid:sub(12,36)
+
+    if(s_Part3 == 48) then -- 0
+        s_Part2 = s_Part2 - 1
+        s_Part3 = 70 -- F
+    elseif s_Part3 == 65 then -- A
+        s_Part3 = 57 -- 9
+    else
+        s_Part3 = s_Part3 - 1
+    end
+
+    local s_Ret = s_Part1 .. string.char(s_Part2) .. string.char(s_Part3) .. s_Part4
+    return s_Ret
+end
+
+function IncreasedGuid( p_Guid )
+    local s_Part1 = p_Guid:sub(1,9)
+    local s_Part2 = string.byte(p_Guid:sub(10,10))
+    local s_Part3 = string.byte(p_Guid:sub(11,11))
+    local s_Part4 = p_Guid:sub(12,36)
+
+    if(s_Part3 == 70) then -- 0
+        s_Part2 = s_Part2 + 1
+        s_Part3 = 48 -- 0
+    elseif s_Part3 == 57 then -- A
+        s_Part3 = 65 -- 9
+    else
+        s_Part3 = s_Part3 + 1
+    end
+
+    local s_Ret = s_Part1 .. string.char(s_Part2) .. string.char(s_Part3) .. s_Part4
+    return s_Ret
+end
+
+
 function StringToVec3(linearTransformString)
     local s_LinearTransformRaw = tostring(linearTransformString)
     local s_Split = s_LinearTransformRaw:gsub("%(", ""):gsub("%)", ""):gsub("% ", ","):split(",")

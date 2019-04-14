@@ -11,18 +11,30 @@ end
 
 function NoHavokServer:RegisterVars()
     self.m_StaticModelGroups = {}
+    self.m_PhysicsAssets = {}
 end
 
 
 function NoHavokServer:RegisterEvents()
     self.m_PartitionLoadedEvent = Events:Subscribe('Partition:Loaded', self, self.OnPartitionLoaded)
     self.m_PlayerJoinedEvent = Events:Subscribe('Player:Authenticated', self, self.OnPlayerAuthenticated)
-    self.m_PhysicsAssets = {}
+    Events:Subscribe('Level:Destroy', self, self.OnLevelDestroy)
+    Events:Subscribe('Server:LevelLoaded', self, self.OnLevelLoaded)
 end
 
+function NoHavokServer:OnLevelDestroy()
+    self:RegisterVars()
+    NoHavokCommon:RegisterVars()
+end
+function NoHavokServer:OnLevelLoaded()
+    print(NoHavokCommon:GetUnresolved())
+    print(NoHavokCommon:GetUnresolvedVariations())
+end
 
 function NoHavokServer:OnPlayerAuthenticated(p_Player)
-    Events:SendTo(p_Player, "NoHavok:PhysicsDataLoaded", self.m_StaticModelGroups)
+    for k,v in pairs(self.m_PhysicsAssets) do
+        NetEvents:SendTo("NoHavok:PhysicsDataLoaded", p_Player, k, v)
+    end
 end
 
 function NoHavokServer:OnPartitionLoaded(p_Partition)

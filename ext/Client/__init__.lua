@@ -15,10 +15,22 @@ end
 
 function NoHavokClient:RegisterEvents()
     self.m_PartitionLoadedEvent = Events:Subscribe('Partition:Loaded', self, self.OnPartitionLoaded)
-    self.m_PhysicsDataLoadedEvent = Events:Subscribe('NoHavok:PhysicsDataLoaded', self, self.onPhysicsDataLoaded)
+    self.m_PhysicsDataLoadedEvent = NetEvents:Subscribe('NoHavok:PhysicsDataLoaded', self, self.onPhysicsDataLoaded)
+    Events:Subscribe('Level:Destroy', self, self.OnLevelDestroy)
+    Events:Subscribe('Client:LevelLoaded', self, self.OnLevelLoaded)
+end
+
+function NoHavokClient:OnLevelDestroy()
+    self:RegisterVars()
+    NoHavokCommon:RegisterVars()
+end
+function NoHavokClient:OnLevelLoaded()
+    print(NoHavokCommon:GetUnresolved())
+    print(NoHavokCommon:GetUnresolvedVariations())
 end
 
 function NoHavokClient:onPhysicsDataLoaded(p_AssetName, p_Data)
+    print("Received asset: " .. p_AssetName)
     NoHavokCommon:RegisterStaticModelGroupAsset(p_AssetName, p_Data)
 end
 
