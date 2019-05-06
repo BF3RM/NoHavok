@@ -248,8 +248,8 @@ function NoHavokCommon:CreateData(p_Name, p_ToSpawn)
 		referenceObject.isPropertyConnectionTarget = 3
 		referenceObject.indexInBlueprint = -1
 		referenceObject.blueprintTransform = v.transform
-		--referenceObject.blueprint = s_Blueprint
-		--referenceObject.objectVariation = s_Variation
+		referenceObject.blueprint = s_Blueprint
+		referenceObject.objectVariation = s_Variation
 		referenceObject.streamRealm = StreamRealm.StreamRealm_None
 		referenceObject.castSunShadowEnable = true
 		referenceObject.excluded = false
@@ -330,15 +330,17 @@ function NoHavokCommon:PatchRegistry(p_Registry, p_WorldPart)
 		if(s_Ref.blueprint ~= nil) then
 			if(s_BlueprintRegistryInstances[tostring(v.instanceGuid)] == nil) then
 				self.m_Registry.blueprintRegistry:add(Blueprint(s_Ref.blueprint))
-				print("Added blueprint to BP registry")
+				--print("Added blueprint to BP registry")
 			end
 			if(s_ReferenceObjectRegistry[tostring(v.instanceGuid)] == nil) then
 				self.m_Registry.referenceObjectRegistry:add(s_Ref)
-				print("Added Ref to REF registry")
+				--print("Added Ref to REF registry")
 			end
 
+		else
+			print("Nil blueprint")
 		end
-		--s_Ref.indexInBlueprint = k
+			--s_Ref.indexInBlueprint = k
 	end
 end
 

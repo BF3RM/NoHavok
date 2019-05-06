@@ -1,3 +1,33 @@
+local HAVOK_GUID_PREFIX = "ED170123"
+local GUIDIndex = 0
+function h()
+    local vars = {"A","B","C","D","E","F","0","1","2","3","4","5","6","7","8","9"}
+    return vars[math.floor(MathUtils:GetRandomInt(1,16))]..vars[math.floor(MathUtils:GetRandomInt(1,16))]
+end
+
+-- Generates a random guid.
+function GenerateGuid()
+    return Guid(HAVOK_GUID_PREFIX.."-"..h()..h().."-"..h()..h().."-"..h()..h().."-"..h()..h()..h()..h()..h()..h(), "D")
+end
+
+function GenerateStaticGuid()
+    GUIDIndex = GUIDIndex + 1
+    return Guid(HAVOK_GUID_PREFIX.."-0000-0000-0000-"..GetFilledNumberAsString(GUIDIndex, 12), "D")
+end
+
+function GetFilledNumberAsString(n, stringLength)
+    local n_string = tostring(n)
+    local prefix = ""
+
+    if string.len(n_string) < stringLength then
+        for i=1,stringLength - string.len(n_string) do
+            prefix = prefix .."0"
+        end
+    end
+
+    return (prefix..n_string)
+end
+
 function DecreasedGuid( p_Guid )
     local s_Part1 = p_Guid:sub(1,9)
     local s_Part2 = string.byte(p_Guid:sub(10,10))
