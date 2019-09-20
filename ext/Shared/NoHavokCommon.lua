@@ -89,8 +89,9 @@ function NoHavokCommon:OnPartitionLoaded(p_Partition)
 		end
 
 		if(l_Instance.typeInfo.name == "StaticModelGroupEntityData") then
-			local s_Original = StaticModelGroupEntityData(l_Instance)
-			local s_Instance = StaticModelGroupEntityData(l_Instance:Clone(l_Instance.instanceGuid))
+			local s_Original = StaticModelGroupEntityData(l_Instance:Clone())
+			local s_Instance = StaticModelGroupEntityData(l_Instance)
+			s_Instance:MakeWritable()
 			table.insert(s_Originals, l_Instance)
 			table.insert(s_Clones, s_Instance)
 
@@ -135,7 +136,7 @@ function NoHavokCommon:OnPartitionLoaded(p_Partition)
 	end
 
 	for k,v in pairs(s_Originals) do
-		p_Partition:ReplaceInstance(s_Originals[k], s_Clones[k], true)
+		--p_Partition:ReplaceInstance(s_Originals[k], s_Clones[k], true)
 	end
 end
 
@@ -246,7 +247,7 @@ function NoHavokCommon:CreateData(p_Name, p_ToSpawn)
 		local referenceObject = ReferenceObjectData()
 		referenceObject.isEventConnectionTarget = 3
 		referenceObject.isPropertyConnectionTarget = 3
-		referenceObject.indexInBlueprint = -1
+		referenceObject.indexInBlueprint = #worldPart.objects + 1000
 		referenceObject.blueprintTransform = v.transform
 		referenceObject.blueprint = s_Blueprint
 		referenceObject.objectVariation = s_Variation
@@ -257,6 +258,7 @@ function NoHavokCommon:CreateData(p_Name, p_ToSpawn)
 			referenceObject.excluded = false
 		end
 		worldPart.objects:add(referenceObject)
+
 
 	    ::continue::
 	end

@@ -89,8 +89,17 @@ function QuatToLineartransform( quat, pos, scale )
     res.up = VecMultiply(quat, Vec3(0,scale,0))
     res.forward = VecMultiply(quat, Vec3(0,0,scale))
 
-
-    -- TODO: Scale?!
+    -- Float inaccuracy
+    for _,dir in pairs({"left", "up", "forward"}) do
+        for _, op in pairs({"x","y","z"}) do
+            if(res[dir][op] == -0.00000000000000000) then
+                res[dir][op] = 0
+            end
+            if(res[dir][op] ~= 0.0 and res[dir][op] < 0.00000000000000001 and res[dir][op] > -0.0000000000000001 or (res[dir][op] == -0.0000000000000 and res[dir][op] ~= 0)) then
+                res[dir][op] = 0
+            end
+        end 
+    end
 
     res.trans = pos
 
