@@ -39,15 +39,7 @@ function processMemberData(index, member, worldPartData, transformIndex, havokAs
 	-- and set its object to the static model entity. We will
 	-- also add it to our custom registry for replication support.
 	--local blueprint = ObjectBlueprint()
-	local blueprint = Blueprint(member.memberType.partition.primaryInstance)
-	blueprint:MakeWritable()
-	--customRegistry.blueprintRegistry:add(blueprint)
-
-	-- Set the relevant flag if this entity needs a network ID,
-	-- which is when the range value is not uint32::max.
-	if member.networkIdRange.first ~= 0xffffffff then
-		blueprint.needNetworkId = true
-	end
+	
 
 	for i = 1, member.instanceCount do
 		-- We will create one new referenceobject with our previously
@@ -58,8 +50,32 @@ function processMemberData(index, member, worldPartData, transformIndex, havokAs
 		-- for proper network replication.
 		local object = ReferenceObjectData(PadAndCreateGuid(havokAsset.name, index, i))
 		partition:AddInstance(object)
+		if member.memberType.isLazyLoaded then
+			member.memberType:RegisterLoadHandlerOnce(function(container)
+				print("Lazy")
+				local blueprint = Blueprint(member.memberType.partition.primaryInstance)
+				blueprint:MakeWritable()
+				--customRegistry.blueprintRegistry:add(blueprint)
 
-		object.blueprint = blueprint
+				-- Set the relevant flag if this entity needs a network ID,
+				-- which is when the range value is not uint32::max.
+				if member.networkIdRange.first ~= 0xffffffff then
+					blueprint.needNetworkId = true
+				end
+				object.blueprint = blueprint
+			end)
+		else
+			local blueprint = Blueprint(member.memberType.partition.primaryInstance)
+			blueprint:MakeWritable()
+			--customRegistry.blueprintRegistry:add(blueprint)
+
+			-- Set the relevant flag if this entity needs a network ID,
+			-- which is when the range value is not uint32::max.
+			if member.networkIdRange.first ~= 0xffffffff then
+				blueprint.needNetworkId = true
+			end
+			object.blueprint = blueprint
+		end
 		object.indexInBlueprint = #worldPartData.objects + 30001
 		object.isEventConnectionTarget = Realm.Realm_None
 		object.isPropertyConnectionTarget = Realm.Realm_None
@@ -81,7 +97,6 @@ function processMemberData(index, member, worldPartData, transformIndex, havokAs
 			end]]
 
 			local transform = havokTransforms[transformIndex]
-
 			-- At index 1 we have the rotation and at index 2 we have the position.
 			local quatTransform = QuatTransform(
 				Quat(transform[1][1], transform[1][2], transform[1][3], transform[1][4]),
@@ -89,7 +104,7 @@ function processMemberData(index, member, worldPartData, transformIndex, havokAs
 			)
 
 			object.blueprintTransform = quatTransform:ToLinearTransform()
-			
+			transformIndex = transformIndex + 1
 		end
 
 		object.castSunShadowEnable = true
@@ -116,7 +131,6 @@ function processMemberData(index, member, worldPartData, transformIndex, havokAs
 		end
 
 		worldPartData.objects:add(object)
-		transformIndex = transformIndex + 1
 	end
 
 	return transformIndex
@@ -154,13 +168,7 @@ function processStaticGroup(instance, partition)
 	for j, member in pairs(smgeData.memberDatas) do
 		-- If the entity data is lazy loaded then we'll need to come
 		-- back and hotpatch it once it is loaded.
-
-		if member.memberType.isLazyLoaded then
-			member.memberType:RegisterLoadHandlerOnce(processMemberData, j, member, worldPartData, transformIndex, havokAsset, partition, havokTransforms)
-			transformIndex = transformIndex + member.instanceCount
-		else
-			transformIndex = processMemberData(j, member, worldPartData, transformIndex, havokAsset, partition, havokTransforms)
-		end
+		transformIndex = processMemberData(j, member, worldPartData, transformIndex, havokAsset, partition, havokTransforms)
 	end
 	smgeData.memberDatas:clear()
 	-- Finally, we'll create a worldpart reference which we'll use
