@@ -1,6 +1,6 @@
 {
 	"Name": "nohavok",
-	"Authors": [ "NoFaTe", "Powback" ],
+	"Authors": [ "RM Dev Team", "breaknix", "keku645" ],
 	"Description": "Replaces static model groups with individual entities for easier manipulation.",
 	"Version": "1.0.0",
 	"HasVeniceEXT": true,

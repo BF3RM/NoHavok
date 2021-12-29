@@ -4,6 +4,8 @@
 HavokTransforms = {}
 local objectVariations = {}
 local pendingVariations = {}
+local foundObjects = {}
+local staticModelGroupNumber = 1
 
 local customRegistry = nil
 local CUSTOMREF_GUID = "ED170123"
@@ -34,13 +36,11 @@ function PadAndCreateGuid(p_Base, p_Index1, p_Index2)
 	return castedGuid
 end
 
-function processMemberData(index, member, worldPartData, transformIndex, havokAsset, partition, havokTransforms)
+function processMemberData(transformIndex, index, member, worldPartData, havokAsset, partition, havokTransforms)
 	-- For every static model we'll create an object blueprint
 	-- and set its object to the static model entity. We will
 	-- also add it to our custom registry for replication support.
 	--local blueprint = ObjectBlueprint()
-	
-
 	for i = 1, member.instanceCount do
 		-- We will create one new referenceobject with our previously
 		-- created blueprint for all instances of this static model.
@@ -48,99 +48,117 @@ function processMemberData(index, member, worldPartData, transformIndex, havokAs
 		-- blueprint index currently in-use by the engine (this is
 		-- currently hardcoded but could be improved). This will allow
 		-- for proper network replication.
-		local object = ReferenceObjectData(PadAndCreateGuid(havokAsset.name, index, i))
-		partition:AddInstance(object)
+		local referenceObjectData = ReferenceObjectData(PadAndCreateGuid(havokAsset.name, index, i))
+		partition:AddInstance(referenceObjectData)
 		if member.memberType.isLazyLoaded then
-			member.memberType:RegisterLoadHandlerOnce(function(container)
-				print("Lazy")
-				local blueprint = Blueprint(member.memberType.partition.primaryInstance)
-				blueprint:MakeWritable()
-				--customRegistry.blueprintRegistry:add(blueprint)
-
-				-- Set the relevant flag if this entity needs a network ID,
-				-- which is when the range value is not uint32::max.
-				if member.networkIdRange.first ~= 0xffffffff then
-					blueprint.needNetworkId = true
-				end
-				object.blueprint = blueprint
+			--print("Found lazy")
+			local transferData = {
+				["i"] = i,
+				["member"] = member,
+				["worldPartData"] = worldPartData,
+				["havokTransforms"] = havokTransforms,
+				["referenceObjectData"] = referenceObjectData
+			}
+			member.memberType:RegisterLoadHandlerOnce(transferData, function(transferData, container)
+				--print("Handling lazy")
+				handleBlueprint(transformIndex, transferData.i, transferData.member, transferData.worldPartData, transferData.havokTransforms, transferData.referenceObjectData)
 			end)
 		else
-			local blueprint = Blueprint(member.memberType.partition.primaryInstance)
-			blueprint:MakeWritable()
-			--customRegistry.blueprintRegistry:add(blueprint)
-
-			-- Set the relevant flag if this entity needs a network ID,
-			-- which is when the range value is not uint32::max.
-			if member.networkIdRange.first ~= 0xffffffff then
-				blueprint.needNetworkId = true
-			end
-			object.blueprint = blueprint
-		end
-		object.indexInBlueprint = #worldPartData.objects + 30001
-		object.isEventConnectionTarget = Realm.Realm_None
-		object.isPropertyConnectionTarget = Realm.Realm_None
-
-		customRegistry.referenceObjectRegistry:add(object)
-
-		if #member.instanceTransforms > 0 then
-			-- If this member contains its own transforms then we get the
-			-- transform from there.
-			object.blueprintTransform = member.instanceTransforms[i]
-		else
-			-- Otherwise, we'll need to calculate the transform using the
-			-- extracted havok data.
-			local scale = 1.0
-
-			-- FIXME: Any scale other than 1.0 currently crashes the server.
-			--[[if i <= #member.instanceScale then
-				scale = member.instanceScale[i]
-			end]]
-
-			local transform = havokTransforms[transformIndex]
-			-- At index 1 we have the rotation and at index 2 we have the position.
-			local quatTransform = QuatTransform(
-				Quat(transform[1][1], transform[1][2], transform[1][3], transform[1][4]),
-				Vec4(transform[2][1], transform[2][2], transform[2][3], scale)
-			)
-
-			object.blueprintTransform = quatTransform:ToLinearTransform()
-			transformIndex = transformIndex + 1
+			handleBlueprint(transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
 		end
 
-		object.castSunShadowEnable = true
-
-		if i <= #member.instanceCastSunShadow then
-			object.castSunShadowEnable = true --member.instanceCastSunShadow[i]
-		end
-
-		if i <= #member.instanceObjectVariation and member.instanceObjectVariation[i] ~= 0 then
-			local variationHash = member.instanceObjectVariation[i]
-			local variation = objectVariations[variationHash]
-
-			-- If we don't have this variation loaded yet we'll set this
-			-- aside and we'll hotpatch it when the variation gets loaded.
-			if variation == nil then
-				if pendingVariations[variationHash] == nil then
-					pendingVariations[variationHash] = {}
-				end
-
-				table.insert(pendingVariations[variationHash], object)
-			else
-				object.objectVariation = variation
-			end
-		end
-
-		worldPartData.objects:add(object)
+		transformIndex = transformIndex + 1
 	end
 
 	return transformIndex
 end
 
+function handleBlueprint(transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
+	local blueprint = Blueprint(member.memberType.partition.primaryInstance)
+	blueprint:MakeWritable()
+	--customRegistry.blueprintRegistry:add(blueprint)
+
+	-- Set the relevant flag if this entity needs a network ID,
+	-- which is when the range value is not uint32::max.
+	if member.networkIdRange.first ~= 0xffffffff then
+		blueprint.needNetworkId = true
+	end
+	referenceObjectData.blueprint = blueprint
+	referenceObjectData.indexInBlueprint = #worldPartData.objects + 30001
+	referenceObjectData.isEventConnectionTarget = Realm.Realm_None
+	referenceObjectData.isPropertyConnectionTarget = Realm.Realm_None
+
+	customRegistry.referenceObjectRegistry:add(referenceObjectData)
+
+	if #member.instanceTransforms > 0 then
+		-- If this member contains its own transforms then we get the
+		-- transform from there.
+		referenceObjectData.blueprintTransform = member.instanceTransforms[i]
+	else
+		-- Otherwise, we'll need to calculate the transform using the
+		-- extracted havok data.
+		local scale = 1.0
+
+		-- FIXME: Any scale other than 1.0 currently crashes the server.
+		--[[if i <= #member.instanceScale then
+			scale = member.instanceScale[i]
+		end]]
+
+		local transform = havokTransforms[transformIndex]
+		-- At index 1 we have the rotation and at index 2 we have the position.
+		local quatTransform = QuatTransform(
+			Quat(transform[1][1], transform[1][2], transform[1][3], transform[1][4]),
+			Vec4(transform[2][1], transform[2][2], transform[2][3], scale)
+		)
+
+		referenceObjectData.blueprintTransform = quatTransform:ToLinearTransform()
+	end
+
+	referenceObjectData.castSunShadowEnable = true
+
+	if i <= #member.instanceCastSunShadow then
+		referenceObjectData.castSunShadowEnable = true --member.instanceCastSunShadow[i]
+	end
+
+	if i <= #member.instanceObjectVariation and member.instanceObjectVariation[i] ~= 0 then
+		local variationHash = member.instanceObjectVariation[i]
+		local variation = objectVariations[variationHash]
+
+		-- If we don't have this variation loaded yet we'll set this
+		-- aside and we'll hotpatch it when the variation gets loaded.
+		if variation == nil then
+			if pendingVariations[variationHash] == nil then
+				pendingVariations[variationHash] = {}
+			end
+
+			table.insert(pendingVariations[variationHash], referenceObjectData)
+		else
+			referenceObjectData.objectVariation = variation
+		end
+	end
+
+	local objectName = referenceObjectData.blueprint.name
+	if foundObjects[objectName] == nil then
+		foundObjects[objectName] = 1
+		-- print(objectName)
+	else
+		foundObjects[objectName] = foundObjects[objectName] + 1
+	end
+
+	-- 3ti: dont add the stuff that crashes mapeditor?
+	if referenceObjectData.blueprint.name == "Levels/XP4_Parliament/Objects/ME_StoreFront_GlassDoor_BigBackdoor_TwoWindows_01_main" then
+		print("FOUND IT")
+	else
+		worldPartData.objects:add(referenceObjectData)
+	end
+end
+
 function processStaticGroup(instance, partition)
+	--print("processStaticGroup")
 	local smgeData = StaticModelGroupEntityData(instance)
 	smgeData:MakeWritable()
 	local havokAsset = GroupHavokAsset(smgeData.physicsData.asset)
-	local worldPartReferenceObjectData = WorldPartReferenceObjectData(PadAndCreateGuid(havokAsset.name,MathUtils:FNVHash(havokAsset.name),MathUtils:FNVHash(havokAsset.name)))
+	local worldPartReferenceObjectData = WorldPartReferenceObjectData(PadAndCreateGuid(havokAsset.name, MathUtils:FNVHash(havokAsset.name), MathUtils:FNVHash(havokAsset.name)))
 	smgeData.physicsData = nil
 	local havokTransforms = HavokTransforms[havokAsset.name:lower()]
 
@@ -165,11 +183,18 @@ function processStaticGroup(instance, partition)
 	-- 	index = 1
 	-- }
 	local transformIndex = 1
-	for j, member in pairs(smgeData.memberDatas) do
+	for j, member in ipairs(smgeData.memberDatas) do
 		-- If the entity data is lazy loaded then we'll need to come
 		-- back and hotpatch it once it is loaded.
-		transformIndex = processMemberData(j, member, worldPartData, transformIndex, havokAsset, partition, havokTransforms)
+		transformIndex = processMemberData(transformIndex, j, member, worldPartData, havokAsset, partition, havokTransforms)
+		--print(tostring(staticModelGroupNumber) .. " - TransformIndex: " .. tostring(transformIndex))
 	end
+	local counter = 0
+	for objectName, amount in pairs(foundObjects) do
+		--print(objectName .. " - " .. tostring(amount))
+		counter = counter + 1
+	end
+	-- print("Unique objects: " .. counter)
 	smgeData.memberDatas:clear()
 	-- Finally, we'll create a worldpart reference which we'll use
 	-- to replace the original static model group.
@@ -208,7 +233,11 @@ Events:Subscribe('Partition:Loaded', function(partition)
 	for _, instance in pairs(partition.instances) do
 		-- We look for all static model groups to convert them into separate entities.
 		if instance:Is('StaticModelGroupEntityData') then
+			--print("staticModelGroupNumber: " .. tostring(staticModelGroupNumber))
+			--print("partition guid: " .. tostring(partition.guid))
+			--print("instance guid: " .. tostring(instance.instanceGuid))
 			local replacement = processStaticGroup(instance, partition)
+			staticModelGroupNumber = staticModelGroupNumber + 1
 
 			if replacement ~= nil then
 				hasToReplace = true
