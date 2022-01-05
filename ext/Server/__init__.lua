@@ -1,4 +1,5 @@
 require('havok')
+require('timeout')
 
 local currentLevel = nil
 -- We are sending the required havok transforms to clients when the level

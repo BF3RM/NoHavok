@@ -28,13 +28,28 @@ function GetPaddedNumberAsString(n, stringLength)
 end
 -- Generates a guid based on a given number. Used for vanilla objects.
 function PadAndCreateGuid(p_Base, p_Index1, p_Index2)
+	-- print(p_Base)
 	local hash = MathUtils:FNVHash(p_Base)
+	-- print(hash)
 	hash = GetPaddedNumberAsString(hash, 8)
+	-- print(hash)
 	local index1 = GetPaddedNumberAsString(p_Index1,4)
 	local index2 = GetPaddedNumberAsString(p_Index2, 12)
 	local guid = hash .. "-0000-0000-".. index1 .."-".. index2
-	local castedGuid = Guid(guid)
-	return castedGuid
+	-- print(guid)
+	local success, ret = pcall(Guid, guid)
+	if not success then
+		-- print(p_Base)
+		-- print(p_Index1)
+		-- print(p_Index2)
+		-- print(guid)
+		print(hash)
+		print(guid)
+		-- print(index1)
+		-- print(index2)
+		error(ret)
+	end
+	return ret
 end
 
 function processMemberData(transformIndex, index, member, worldPartData, havokAsset, partition, havokTransforms)
