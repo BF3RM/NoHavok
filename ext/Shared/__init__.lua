@@ -11,6 +11,7 @@ local customRegistry = nil
 local CUSTOMREF_GUID = "ED170123"
 
 function GetPaddedNumberAsString(n, stringLength)
+	n = math.abs(n)
 	local n_string = tostring(n)
 	local prefix = ""
 
