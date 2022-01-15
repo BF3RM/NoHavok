@@ -10,6 +10,19 @@ local staticModelGroupNumber = 1
 local customRegistry = nil
 local CUSTOMREF_GUID = "ED170123"
 
+local blacklistedBlueprintNames = {
+	["Levels/XP4_Parliament/Objects/ME_StoreFront_GlassDoor_BigBackdoor_TwoWindows_01_main"] = true,
+	["Objects/Ashtray_01/Ashtray_01"] = true,
+	["Objects/Phonebooth_02/Phonebooth_02"] = true,
+	["Objects/MetroSigns/MetroSign_14"] = true,
+	["Objects/MetroSigns/MetroSign_25"] = true,
+	["Objects/MetroSigns/MetroSign_32"] = true,
+	["Objects/MetroSigns/MetroSign_57"] = true,
+	["Objects/SignsBorder_01/Sign_LED_Wait_01"] = true,
+	["Levels/XP5_002/Objects/ConveyorLine_01_XP5_002/ConveyorLine_01b_XP5_002"] = true,
+	["Levels/XP5_002/Objects/ConveyorLine_01_XP5_002/ConveyorLine_01c_XP5_002"] = true
+}
+
 function GetPaddedNumberAsString(n, stringLength)
 	n = math.abs(n)
 	local n_string = tostring(n)
@@ -146,9 +159,8 @@ function handleBlueprint(transformIndex, i, member, worldPartData, havokTransfor
 		foundObjects[objectName] = foundObjects[objectName] + 1
 	end
 
-	-- 3ti: dont add the stuff that crashes mapeditor?
-	if referenceObjectData.blueprint.name == "Levels/XP4_Parliament/Objects/ME_StoreFront_GlassDoor_BigBackdoor_TwoWindows_01_main" then
-		print("FOUND IT")
+	if blacklistedBlueprintNames[referenceObjectData.blueprint.name] then
+		print("Found a blacklisted blueprint, ignoring. Name: " .. referenceObjectData.blueprint.name)
 	else
 		worldPartData.objects:add(referenceObjectData)
 	end
