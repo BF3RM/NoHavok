@@ -23,31 +23,20 @@ local blacklistedBlueprintNames = {
 	["Levels/XP5_002/Objects/ConveyorLine_01_XP5_002/ConveyorLine_01c_XP5_002"] = true
 }
 
-function GetPaddedNumberAsString(n, stringLength)
-	n = math.abs(n)
-	local n_string = tostring(n)
-	local prefix = ""
-
-	if string.len(n_string) < stringLength then
-		for _=1,stringLength - string.len(n_string) do
-			prefix = prefix .."0"
-		end
-	else 
-		local trimSize = ((string.len(n_string) - stringLength) + 1) * -1
-		n_string = n_string:sub(1, trimSize)
-	end
-
-	return (prefix..n_string)
-end
 -- Generates a guid based on a given number. Used for vanilla objects.
 function PadAndCreateGuid(p_Base, p_Index1, p_Index2)
 	local hash = MathUtils:FNVHash(p_Base)
-	hash = GetPaddedNumberAsString(hash, 8)
-	local index1 = GetPaddedNumberAsString(p_Index1,4)
-	local index2 = GetPaddedNumberAsString(p_Index2, 12)
+	hash = string.format("%08x", hash)
+	hash = string.sub(hash, -8)
+	
+	local index1 = string.format("%04x", p_Index1)
+	index1 = string.sub(index1, -4)
+	
+	local index2 = string.format("%012x", p_Index2)
+	index2 = string.sub(index2, -12)
+	
 	local guid = hash .. "-0000-0000-".. index1 .."-".. index2
-	local castedGuid = Guid(guid)
-	return castedGuid
+	return Guid(guid)
 end
 
 function processMemberData(transformIndex, index, member, worldPartData, havokAsset, partition, havokTransforms)
