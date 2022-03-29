@@ -108,6 +108,12 @@ function handleBlueprint(transformIndex, i, member, worldPartData, havokTransfor
 		end]]
 
 		local transform = havokTransforms[transformIndex]
+
+		if not transform then
+			print('Transform not found, index: ' .. transformIndex)
+			return
+		end
+
 		-- At index 1 we have the rotation and at index 2 we have the position.
 		local quatTransform = QuatTransform(
 			Quat(transform[1][1], transform[1][2], transform[1][3], transform[1][4]),
@@ -141,12 +147,12 @@ function handleBlueprint(transformIndex, i, member, worldPartData, havokTransfor
 	end
 
 	local objectName = referenceObjectData.blueprint.name
-	if foundObjects[objectName] == nil then
-		foundObjects[objectName] = 1
-		-- print(objectName)
-	else
-		foundObjects[objectName] = foundObjects[objectName] + 1
-	end
+	-- if foundObjects[objectName] == nil then
+	-- 	foundObjects[objectName] = 1
+	-- 	-- print(objectName)
+	-- else
+	-- 	foundObjects[objectName] = foundObjects[objectName] + 1
+	-- end
 
 	if blacklistedBlueprintNames[referenceObjectData.blueprint.name] then
 		print("Found a blacklisted blueprint, ignoring. Name: " .. referenceObjectData.blueprint.name)
@@ -159,6 +165,11 @@ function processStaticGroup(instance, partition)
 	--print("processStaticGroup")
 	local smgeData = StaticModelGroupEntityData(instance)
 	smgeData:MakeWritable()
+	
+	if not smgeData or not smgeData.physicsData then
+		print('StaticModelGroupEntityData was nil. Partition guid: ' .. tostring(partition.guid) .. ", name:" .. tostring(instance.guid))
+	end
+	
 	local havokAsset = GroupHavokAsset(smgeData.physicsData.asset)
 	local worldPartReferenceObjectData = WorldPartReferenceObjectData(PadAndCreateGuid(havokAsset.name, MathUtils:FNVHash(havokAsset.name), MathUtils:FNVHash(havokAsset.name)))
 	smgeData.physicsData = nil
@@ -169,7 +180,6 @@ function processStaticGroup(instance, partition)
 		print('No havok transforms found for "' .. havokAsset.name .. '".')
 		return nil
 	end
-
 
 	-- Create some WorldPartData. This will hold all of the entities
 	-- we'll extract from the static group.
@@ -191,13 +201,14 @@ function processStaticGroup(instance, partition)
 		transformIndex = processMemberData(transformIndex, j, member, worldPartData, havokAsset, partition, havokTransforms)
 		--print(tostring(staticModelGroupNumber) .. " - TransformIndex: " .. tostring(transformIndex))
 	end
-	local counter = 0
-	for objectName, amount in pairs(foundObjects) do
-		--print(objectName .. " - " .. tostring(amount))
-		counter = counter + 1
-	end
+	-- local counter = 0
+	-- for objectName, amount in pairs(foundObjects) do
+	-- 	--print(objectName .. " - " .. tostring(amount))
+	-- 	counter = counter + 1
+	-- end
 	-- print("Unique objects: " .. counter)
 	smgeData.memberDatas:clear()
+	
 	-- Finally, we'll create a worldpart reference which we'll use
 	-- to replace the original static model group.
 	partition:AddInstance(worldPartReferenceObjectData)
@@ -231,6 +242,16 @@ end
 Events:Subscribe('Partition:Loaded', function(partition)
 	local groupsToReplace = {}
 	local hasToReplace = false
+
+	-- Resources haven't loaded yet, so we don't care about the partition (it's about persitence/sound/description) 
+	if not SharedUtils:GetLevelName() then
+		return
+	end
+
+	-- Ignore partitions that are from sideloaded bundles or not related to the level
+	if not string.find(partition.name:lower(), 'levels') or not string.find(partition.name:lower(), SharedUtils:GetLevelName():lower()) then
+		return
+	end
 
 	for _, instance in pairs(partition.instances) do
 		-- We look for all static model groups to convert them into separate entities.
