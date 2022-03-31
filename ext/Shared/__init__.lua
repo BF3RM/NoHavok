@@ -93,7 +93,7 @@ function handleBlueprint(transformIndex, i, member, worldPartData, havokTransfor
 
 	customRegistry.referenceObjectRegistry:add(referenceObjectData)
 
-	if #member.instanceTransforms > 0 then
+	if #member.instanceTransforms > 0 and member.instanceTransforms[i] ~= nil then
 		-- If this member contains its own transforms then we get the
 		-- transform from there.
 		referenceObjectData.blueprintTransform = member.instanceTransforms[i]
@@ -248,23 +248,21 @@ Events:Subscribe('Partition:Loaded', function(partition)
 		return
 	end
 
-	-- Ignore partitions that are from sideloaded bundles or not related to the level
-	if not string.find(partition.name:lower(), 'levels') or not string.find(partition.name:lower(), SharedUtils:GetLevelName():lower()) then
-		return
-	end
-
 	for _, instance in pairs(partition.instances) do
 		-- We look for all static model groups to convert them into separate entities.
 		if instance:Is('StaticModelGroupEntityData') then
-			--print("staticModelGroupNumber: " .. tostring(staticModelGroupNumber))
-			--print("partition guid: " .. tostring(partition.guid))
-			--print("instance guid: " .. tostring(instance.instanceGuid))
-			local replacement = processStaticGroup(instance, partition)
-			staticModelGroupNumber = staticModelGroupNumber + 1
+			-- Ignore if it's from a sideloaded bundle
+			if string.find(partition.name:lower(), SharedUtils:GetLevelName():lower()) then
+				--print("staticModelGroupNumber: " .. tostring(staticModelGroupNumber))
+				--print("partition guid: " .. tostring(partition.guid))
+				--print("instance guid: " .. tostring(instance.instanceGuid))
+				local replacement = processStaticGroup(instance, partition)
+				staticModelGroupNumber = staticModelGroupNumber + 1
 
-			if replacement ~= nil then
-				hasToReplace = true
-				groupsToReplace[StaticModelGroupEntityData(instance)] = replacement
+				if replacement ~= nil then
+					hasToReplace = true
+					groupsToReplace[StaticModelGroupEntityData(instance)] = replacement
+				end
 			end
 		elseif instance:Is('ObjectVariation') then
 			-- Store all variations in a map.
