@@ -43,7 +43,9 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 	-- For every static model we'll create an object blueprint
 	-- and set its object to the static model entity. We will
 	-- also add it to our custom registry for replication support.
-	--local blueprint = ObjectBlueprint()
+	local blueprint = ObjectBlueprint()
+	customRegistry.blueprintRegistry:add(blueprint)
+
 	for i = 1, member.instanceCount do
 		-- We will create one new referenceobject with our previously
 		-- created blueprint for all instances of this static model.
@@ -53,22 +55,8 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 		-- for proper network replication.
 		local referenceObjectData = ReferenceObjectData(PadAndCreateGuid(havokAsset.name, index, i))
 		partition:AddInstance(referenceObjectData)
-		if member.memberType.isLazyLoaded then
-			--print("Found lazy")
-			local transferData = {
-				["i"] = i,
-				["member"] = member,
-				["worldPartData"] = worldPartData,
-				["havokTransforms"] = havokTransforms,
-				["referenceObjectData"] = referenceObjectData
-			}
-			member.memberType:RegisterLoadHandlerOnce(transferData, function(transferData, container)
-				--print("Handling lazy")
-				handleBlueprint(transformIndex, transferData.i, transferData.member, transferData.worldPartData, transferData.havokTransforms, transferData.referenceObjectData)
-			end)
-		else
-			handleBlueprint(transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
-		end
+
+		handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
 
 		transformIndex = transformIndex + 1
 	end
@@ -76,11 +64,7 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 	return transformIndex
 end
 
-function handleBlueprint(transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
-	local blueprint = Blueprint(member.memberType.partition.primaryInstance)
-	blueprint:MakeWritable()
-	--customRegistry.blueprintRegistry:add(blueprint)
-
+function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
 	-- Set the relevant flag if this entity needs a network ID,
 	-- which is when the range value is not uint32::max.
 	if member.networkIdRange.first ~= 0xffffffff then
@@ -92,6 +76,16 @@ function handleBlueprint(transformIndex, i, member, worldPartData, havokTransfor
 	referenceObjectData.isPropertyConnectionTarget = Realm.Realm_None
 
 	customRegistry.referenceObjectRegistry:add(referenceObjectData)
+
+	-- If the entity data is lazy loaded then we'll need to come
+	-- back and hotpatch it once it is loaded.
+	if member.memberType.isLazyLoaded then
+		member.memberType:RegisterLoadHandlerOnce(function(ctr)
+			blueprint.object = GameObjectData(ctr)
+		end)
+	else
+		blueprint.object = member.memberType
+	end
 
 	if #member.instanceTransforms > 0 and member.instanceTransforms[i] ~= nil then
 		-- If this member contains its own transforms then we get the
