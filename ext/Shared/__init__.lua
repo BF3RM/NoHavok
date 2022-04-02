@@ -56,9 +56,7 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 		local referenceObjectData = ReferenceObjectData(PadAndCreateGuid(havokAsset.name, index, i))
 		partition:AddInstance(referenceObjectData)
 
-		handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
-
-		transformIndex = transformIndex + 1
+		transformIndex = handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
 	end
 
 	return transformIndex
@@ -115,6 +113,8 @@ function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, ha
 		)
 
 		referenceObjectData.blueprintTransform = quatTransform:ToLinearTransform()
+
+		transformIndex = transformIndex + 1
 	end
 
 	referenceObjectData.castSunShadowEnable = true
@@ -153,6 +153,8 @@ function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, ha
 	else
 		worldPartData.objects:add(referenceObjectData)
 	end
+
+	return transformIndex
 end
 
 function processStaticGroup(instance, partition)
