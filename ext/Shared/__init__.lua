@@ -5,6 +5,7 @@ HavokTransforms = {}
 local objectVariations = {}
 local pendingVariations = {}
 local foundObjects = {}
+local blueprints = {}
 local staticModelGroupNumber = 1
 
 local customRegistry = nil
@@ -43,9 +44,15 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 	-- For every static model we'll create an object blueprint
 	-- and set its object to the static model entity. We will
 	-- also add it to our custom registry for replication support.
-	local blueprint = ObjectBlueprint()
-	customRegistry.blueprintRegistry:add(blueprint)
-
+	local blueprint = ObjectBlueprint(PadAndCreateGuid(havokAsset.name .. "_blueprint", index, 0))
+	if(blueprints[tostring(member.memberType.instanceGuid)] ~= nil) then
+		blueprint = blueprints[tostring(member.memberType.instanceGuid)]
+	else
+		blueprint.name = havokAsset.name .. "_blueprint_" .. index
+		print("Creating new blueprint for: " .. blueprint.name)
+		customRegistry.blueprintRegistry:add(blueprint)
+		partition:AddInstance(blueprint)
+	end
 	for i = 1, member.instanceCount do
 		-- We will create one new referenceobject with our previously
 		-- created blueprint for all instances of this static model.
@@ -58,15 +65,16 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 
 		transformIndex = handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
 	end
-
 	return transformIndex
 end
 
 function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
 	-- Set the relevant flag if this entity needs a network ID,
 	-- which is when the range value is not uint32::max.
-	if member.networkIdRange.first ~= 0xffffffff then
-		blueprint.needNetworkId = true
+	if(not blueprint.isReadOnly) then
+		if member.networkIdRange.first ~= 0xffffffff then
+			blueprint.needNetworkId = true
+		end
 	end
 	referenceObjectData.blueprint = blueprint
 	referenceObjectData.indexInBlueprint = #worldPartData.objects + 30001
@@ -74,17 +82,17 @@ function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, ha
 	referenceObjectData.isPropertyConnectionTarget = Realm.Realm_None
 
 	customRegistry.referenceObjectRegistry:add(referenceObjectData)
-
-	-- If the entity data is lazy loaded then we'll need to come
-	-- back and hotpatch it once it is loaded.
-	if member.memberType.isLazyLoaded then
-		member.memberType:RegisterLoadHandlerOnce(function(ctr)
-			blueprint.object = GameObjectData(ctr)
-		end)
-	else
-		blueprint.object = member.memberType
+	if(not blueprint.isReadOnly) then
+		-- If the entity data is lazy loaded then we'll need to come
+		-- back and hotpatch it once it is loaded.
+		if member.memberType.isLazyLoaded then
+			member.memberType:RegisterLoadHandlerOnce(function(ctr)
+				blueprint.object = GameObjectData(ctr)
+			end)
+		else
+			blueprint.object = member.memberType
+		end
 	end
-
 	if #member.instanceTransforms > 0 and member.instanceTransforms[i] ~= nil then
 		-- If this member contains its own transforms then we get the
 		-- transform from there.
@@ -270,6 +278,22 @@ Events:Subscribe('Partition:Loaded', function(partition)
 					object.objectVariation = variation
 				end
 				pendingVariations[variation.nameHash] = nil
+			end
+		elseif instance:Is('ObjectBlueprint') then
+			-- Store all variations in a map.
+			local blueprint = ObjectBlueprint(instance)
+			if blueprint.object.isLazyLoaded then
+				blueprint.object:RegisterLoadHandlerOnce(function(ctr)
+					blueprints[tostring(blueprint.object.instanceGuid)] = ObjectBlueprint(blueprint)
+				end)
+			else
+				blueprints[tostring(blueprint.object.instanceGuid)] = blueprint
+			end
+		elseif instance:Is('PrefabBlueprint') then
+			-- Store all variations in a map.
+			local blueprint = PrefabBlueprint(instance)
+			for _, object in pairs(blueprint.objects) do
+				blueprints[tostring(object.instanceGuid)] = blueprint
 			end
 		end
 	end
