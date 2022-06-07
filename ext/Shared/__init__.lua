@@ -10,19 +10,6 @@ local staticModelGroupNumber = 1
 local customRegistry = nil
 local CUSTOMREF_GUID = "ED170123"
 
-local blacklistedBlueprintNames = {
-	["Levels/XP4_Parliament/Objects/ME_StoreFront_GlassDoor_BigBackdoor_TwoWindows_01_main"] = true,
-	["Objects/Ashtray_01/Ashtray_01"] = true,
-	["Objects/Phonebooth_02/Phonebooth_02"] = true,
-	["Objects/MetroSigns/MetroSign_14"] = true,
-	["Objects/MetroSigns/MetroSign_25"] = true,
-	["Objects/MetroSigns/MetroSign_32"] = true,
-	["Objects/MetroSigns/MetroSign_57"] = true,
-	["Objects/SignsBorder_01/Sign_LED_Wait_01"] = true,
-	["Levels/XP5_002/Objects/ConveyorLine_01_XP5_002/ConveyorLine_01b_XP5_002"] = true,
-	["Levels/XP5_002/Objects/ConveyorLine_01_XP5_002/ConveyorLine_01c_XP5_002"] = true
-}
-
 -- Generates a guid based on a given number. Used for vanilla objects.
 function PadAndCreateGuid(p_Base, p_Index1, p_Index2)
 	local hash = MathUtils:FNVHash(p_Base)
@@ -56,34 +43,24 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 		local referenceObjectData = ReferenceObjectData(PadAndCreateGuid(havokAsset.name, index, i))
 		partition:AddInstance(referenceObjectData)
 
-		transformIndex = handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
+		transformIndex = handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData, index)
 	end
 
 	return transformIndex
 end
 
-function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData)
+function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData, index)
 	-- Set the relevant flag if this entity needs a network ID,
 	-- which is when the range value is not uint32::max.
 	if member.networkIdRange.first ~= 0xffffffff then
 		blueprint.needNetworkId = true
 	end
 	referenceObjectData.blueprint = blueprint
-	referenceObjectData.indexInBlueprint = #worldPartData.objects + 30001
+	-- referenceObjectData.indexInBlueprint = #worldPartData.objects + 30001
 	referenceObjectData.isEventConnectionTarget = Realm.Realm_None
 	referenceObjectData.isPropertyConnectionTarget = Realm.Realm_None
 
 	customRegistry.referenceObjectRegistry:add(referenceObjectData)
-
-	-- If the entity data is lazy loaded then we'll need to come
-	-- back and hotpatch it once it is loaded.
-	if member.memberType.isLazyLoaded then
-		member.memberType:RegisterLoadHandlerOnce(function(ctr)
-			blueprint.object = GameObjectData(ctr)
-		end)
-	else
-		blueprint.object = member.memberType
-	end
 
 	if #member.instanceTransforms > 0 and member.instanceTransforms[i] ~= nil then
 		-- If this member contains its own transforms then we get the
@@ -94,10 +71,9 @@ function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, ha
 		-- extracted havok data.
 		local scale = 1.0
 
-		-- FIXME: Any scale other than 1.0 currently crashes the server.
-		--[[if i <= #member.instanceScale then
+		if i <= #member.instanceScale then
 			scale = member.instanceScale[i]
-		end]]
+		end
 
 		local transform = havokTransforms[transformIndex]
 
@@ -140,17 +116,36 @@ function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, ha
 		end
 	end
 
-	local objectName = referenceObjectData.blueprint.name
-	-- if foundObjects[objectName] == nil then
-	-- 	foundObjects[objectName] = 1
-	-- 	-- print(objectName)
-	-- else
-	-- 	foundObjects[objectName] = foundObjects[objectName] + 1
-	-- end
+	if member.memberType.isLazyLoaded then
+		member.memberType:RegisterLoadHandlerOnce(function(ctr)
+			blueprint.object = GameObjectData(ctr)
+			local bpName =  Blueprint(ctr.partition.primaryInstance).name
+			blueprint.name = bpName
+			
+			-- FIXME: rock assets (some others too) crash the server if their scale is not set to 1.0
+			if string.find(bpName:lower(), 'rock') or string.find(bpName:lower(), 'storefronts_gate') then
+				-- print("Setting scale of blueprint " .. bpName .. " to 1.0, as it's a problematic asset")
+				local qt = referenceObjectData.blueprintTransform:ToQuatTransform(true)
+				qt.transAndScale.w = 1.0
+				referenceObjectData.blueprintTransform = qt:ToLinearTransform()
+			end
 
-	if blacklistedBlueprintNames[referenceObjectData.blueprint.name] then
-		print("Found a blacklisted blueprint, ignoring. Name: " .. referenceObjectData.blueprint.name)
+			referenceObjectData.indexInBlueprint = #worldPartData.objects + 30001
+			worldPartData.objects:add(referenceObjectData)
+		end)
 	else
+		blueprint.object = member.memberType
+		local bpName =  Blueprint(member.memberType.partition.primaryInstance).name
+
+		blueprint.name = bpName
+		-- FIXME: rock assets (some others too) crash the server if their scale is not set to 1.0
+		if string.find(bpName:lower(), 'rock') or string.find(bpName:lower(), 'storefronts_gate') then
+			-- print("Setting scale of blueprint " .. bpName .. " to 1.0, as it's a problematic asset")
+			local qt = referenceObjectData.blueprintTransform:ToQuatTransform(true)
+			qt.transAndScale.w = 1.0
+			referenceObjectData.blueprintTransform = qt:ToLinearTransform()
+		end
+		referenceObjectData.indexInBlueprint = #worldPartData.objects + 30001
 		worldPartData.objects:add(referenceObjectData)
 	end
 
