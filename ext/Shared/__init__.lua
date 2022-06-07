@@ -5,6 +5,7 @@ HavokTransforms = {}
 local objectVariations = {}
 local pendingVariations = {}
 local foundObjects = {}
+local blueprints = {}
 local staticModelGroupNumber = 1
 
 local customRegistry = nil
@@ -30,9 +31,17 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 	-- For every static model we'll create an object blueprint
 	-- and set its object to the static model entity. We will
 	-- also add it to our custom registry for replication support.
-	local blueprint = ObjectBlueprint()
-	customRegistry.blueprintRegistry:add(blueprint)
-
+	local blueprint = ObjectBlueprint(PadAndCreateGuid(havokAsset.name .. "_blueprint", index, 0))
+	
+	if blueprints[tostring(member.memberType.instanceGuid)] ~= nil then
+		blueprint = blueprints[tostring(member.memberType.instanceGuid)]
+	else
+		blueprint.name = havokAsset.name .. "_blueprint_" .. index
+		print("Creating new blueprint for: " .. blueprint.name)
+		customRegistry.blueprintRegistry:add(blueprint)
+		partition:AddInstance(blueprint)
+	end
+	
 	for i = 1, member.instanceCount do
 		-- We will create one new referenceobject with our previously
 		-- created blueprint for all instances of this static model.
@@ -45,15 +54,16 @@ function processMemberData(transformIndex, index, member, worldPartData, havokAs
 
 		transformIndex = handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData, index)
 	end
-
 	return transformIndex
 end
 
 function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, havokTransforms, referenceObjectData, index)
 	-- Set the relevant flag if this entity needs a network ID,
 	-- which is when the range value is not uint32::max.
-	if member.networkIdRange.first ~= 0xffffffff then
-		blueprint.needNetworkId = true
+	if not blueprint.isReadOnly then
+		if member.networkIdRange.first ~= 0xffffffff then
+			blueprint.needNetworkId = true
+		end
 	end
 	referenceObjectData.blueprint = blueprint
 	-- referenceObjectData.indexInBlueprint = #worldPartData.objects + 30001
@@ -118,10 +128,13 @@ function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, ha
 
 	if member.memberType.isLazyLoaded then
 		member.memberType:RegisterLoadHandlerOnce(function(ctr)
-			blueprint.object = GameObjectData(ctr)
 			local bpName =  Blueprint(ctr.partition.primaryInstance).name
-			blueprint.name = bpName
-			
+
+			if not blueprint.isReadOnly then
+				blueprint.object = GameObjectData(ctr)
+				blueprint.name = bpName
+			end
+
 			-- FIXME: rock assets (some others too) crash the server if their scale is not set to 1.0
 			if string.find(bpName:lower(), 'rock') or string.find(bpName:lower(), 'storefronts_gate') then
 				-- print("Setting scale of blueprint " .. bpName .. " to 1.0, as it's a problematic asset")
@@ -134,10 +147,13 @@ function handleBlueprint(blueprint, transformIndex, i, member, worldPartData, ha
 			worldPartData.objects:add(referenceObjectData)
 		end)
 	else
-		blueprint.object = member.memberType
 		local bpName =  Blueprint(member.memberType.partition.primaryInstance).name
 
-		blueprint.name = bpName
+		if not blueprint.isReadOnly then
+			blueprint.object = member.memberType
+			blueprint.name = bpName
+		end
+
 		-- FIXME: rock assets (some others too) crash the server if their scale is not set to 1.0
 		if string.find(bpName:lower(), 'rock') or string.find(bpName:lower(), 'storefronts_gate') then
 			-- print("Setting scale of blueprint " .. bpName .. " to 1.0, as it's a problematic asset")
@@ -265,6 +281,22 @@ Events:Subscribe('Partition:Loaded', function(partition)
 					object.objectVariation = variation
 				end
 				pendingVariations[variation.nameHash] = nil
+			end
+		elseif instance:Is('ObjectBlueprint') then
+			-- Store all variations in a map.
+			local blueprint = ObjectBlueprint(instance)
+			if blueprint.object.isLazyLoaded then
+				blueprint.object:RegisterLoadHandlerOnce(function(ctr)
+					blueprints[tostring(blueprint.object.instanceGuid)] = ObjectBlueprint(blueprint)
+				end)
+			else
+				blueprints[tostring(blueprint.object.instanceGuid)] = blueprint
+			end
+		elseif instance:Is('PrefabBlueprint') then
+			-- Store all variations in a map.
+			local blueprint = PrefabBlueprint(instance)
+			for _, object in pairs(blueprint.objects) do
+				blueprints[tostring(object.instanceGuid)] = blueprint
 			end
 		end
 	end
