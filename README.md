@@ -1,4 +1,7 @@
-# nohavok
+# OLD VERSION
+You can find the new version here https://github.com/BF3RM/NoHavokGen
+
+# nohavok (legacy)
 
 This mod replaces all static model groups (StaticModelGroupEntityData) with individual entities for easier manipulation.
 
